@@ -1,0 +1,169 @@
+version: "3.9"
+
+services:
+
+  # ============================
+  # MongoDB Database
+  # ============================
+  mongodb:
+    image: mongo:6
+    container_name: mongodb
+    restart: always
+    environment:
+      MONGO_INITDB_DATABASE: instagramdb
+    volumes:
+      - ./database/mongo-data:/data/db
+      - ./database/docker-mongo-init.js:/docker-entrypoint-initdb.d/init.js:ro
+    ports:
+      - "27017:27017"
+    networks:
+      - insta-net
+
+  # ============================
+  # Auth Service
+  # ============================
+  auth-service:
+    build: ./services/auth-service
+    container_name: auth-service
+    restart: always
+    environment:
+      MONGO_URL: mongodb://mongodb:27017/instagramdb
+      JWT_SECRET: "supersecretkey"
+    depends_on:
+      - mongodb
+    networks:
+      - insta-net
+    ports:
+      - "8001:8001"
+
+  # ============================
+  # User Service
+  # ============================
+  user-service:
+    build: ./services/user-service
+    container_name: user-service
+    restart: always
+    environment:
+      MONGO_URL: mongodb://mongodb:27017/instagramdb
+    depends_on:
+      - mongodb
+    networks:
+      - insta-net
+    ports:
+      - "8002:8002"
+
+  # ============================
+  # Post Service
+  # ============================
+  post-service:
+    build: ./services/post-service
+    container_name: post-service
+    restart: always
+    environment:
+      MONGO_URL: mongodb://mongodb:27017/instagramdb
+      MEDIA_PATH: /app/storage/uploads
+    volumes:
+      - ./services/post-service/storage/uploads:/app/storage/uploads
+    depends_on:
+      - mongodb
+    networks:
+      - insta-net
+    ports:
+      - "8003:8003"
+
+  # ============================
+  # Comment Service
+  # ============================
+  comment-service:
+    build: ./services/comment-service
+    container_name: comment-service
+    restart: always
+    environment:
+      MONGO_URL: mongodb://mongodb:27017/instagramdb
+    depends_on:
+      - mongodb
+    networks:
+      - insta-net
+    ports:
+      - "8004:8004"
+
+  # ============================
+  # Like Service
+  # ============================
+  like-service:
+    build: ./services/like-service
+    container_name: like-service
+    restart: always
+    environment:
+      MONGO_URL: mongodb://mongodb:27017/instagramdb
+    depends_on:
+      - mongodb
+    networks:
+      - insta-net
+    ports:
+      - "8005:8005"
+
+  # ============================
+  # Feed Service
+  # ============================
+  feed-service:
+    build: ./services/feed-service
+    container_name: feed-service
+    restart: always
+    environment:
+      MONGO_URL: mongodb://mongodb:27017/instagramdb
+    depends_on:
+      - mongodb
+    networks:
+      - insta-net
+    ports:
+      - "8006:8006"
+
+  # ============================
+  # Notification Service
+  # ============================
+  notification-service:
+    build: ./services/notification-service
+    container_name: notification-service
+    restart: always
+    environment:
+      MONGO_URL: mongodb://mongodb:27017/instagramdb
+    depends_on:
+      - mongodb
+    networks:
+      - insta-net
+    ports:
+      - "8007:8007"
+
+  # ============================
+  # API Gateway (FastAPI)
+  # ============================
+  gateway-service:
+    build: ./services/gateway-service
+    container_name: gateway-service
+    restart: always
+    environment:
+      AUTH_URL: http://auth-service:8001
+      USER_URL: http://user-service:8002
+      POST_URL: http://post-service:8003
+      COMMENT_URL: http://comment-service:8004
+      LIKE_URL: http://like-service:8005
+      FEED_URL: http://feed-service:8006
+      NOTIFICATION_URL: http://notification-service:8007
+    depends_on:
+      - auth-service
+      - user-service
+      - post-service
+      - comment-service
+      - like-service
+      - feed-service
+      - notification-service
+    networks:
+      - insta-net
+    ports:
+      - "8000:8000"  # Gateway exposed
+
+networks:
+  insta-net:
+    driver: bridge
+

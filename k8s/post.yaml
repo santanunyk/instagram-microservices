@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: post
+  namespace: insta
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: post
+  template:
+    metadata:
+      labels:
+        app: post
+    spec:
+      containers:
+        - name: post
+          image: post-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8003
+          env:
+            - name: MONGO_URL
+              value: "mongodb://mongodb:27017/instagramdb"
+            - name: MEDIA_PATH
+              value: "/media"
+          volumeMounts:
+            - name: media
+              mountPath: /media
+      volumes:
+        - name: media
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: post
+  namespace: insta
+spec:
+  selector:
+    app: post
+  ports:
+    - port: 8003
+      targetPort: 8003
+

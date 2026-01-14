@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification
+  namespace: insta
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notification
+  template:
+    metadata:
+      labels:
+        app: notification
+    spec:
+      containers:
+        - name: notification
+          image: notification-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8007
+          env:
+            - name: MONGO_URL
+              value: "mongodb://mongodb:27017/instagramdb"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notification
+  namespace: insta
+spec:
+  selector:
+    app: notification
+  ports:
+    - port: 8007
+      targetPort: 8007
+

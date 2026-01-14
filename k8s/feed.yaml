@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: feed
+  namespace: insta
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: feed
+  template:
+    metadata:
+      labels:
+        app: feed
+    spec:
+      containers:
+        - name: feed
+          image: feed-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8006
+          env:
+            - name: MONGO_URL
+              value: "mongodb://mongodb:27017/instagramdb"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: feed
+  namespace: insta
+spec:
+  selector:
+    app: feed
+  ports:
+    - port: 8006
+      targetPort: 8006
+
