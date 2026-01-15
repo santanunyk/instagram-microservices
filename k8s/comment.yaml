@@ -15,8 +15,8 @@ spec:
     spec:
       containers:
         - name: comment
-          image: comment-service:latest
-          imagePullPolicy: IfNotPresent
+          image: sunaodisha/comment-service:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 8004
           env:

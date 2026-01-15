@@ -15,8 +15,8 @@ spec:
     spec:
       containers:
         - name: gateway
-          image: gateway-service:latest
-          imagePullPolicy: IfNotPresent
+          image: sunaodisha/gateway-service:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 8000
           env:

@@ -15,8 +15,8 @@ spec:
     spec:
       containers:
         - name: auth
-          image: auth-service:latest
-          imagePullPolicy: IfNotPresent
+          image: sunaodisha/latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 8001
           env:

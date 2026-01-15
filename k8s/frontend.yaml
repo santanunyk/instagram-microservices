@@ -15,8 +15,8 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: frontendctx:v8
-          imagePullPolicy: IfNotPresent
+          image: sunodisha/frontend:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 3000
 ---

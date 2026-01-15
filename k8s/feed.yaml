@@ -15,8 +15,8 @@ spec:
     spec:
       containers:
         - name: feed
-          image: feed-service:latest
-          imagePullPolicy: IfNotPresent
+          image: sunaodisha/feed-service:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 8006
           env:

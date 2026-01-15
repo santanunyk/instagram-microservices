@@ -15,8 +15,8 @@ spec:
     spec:
       containers:
         - name: post
-          image: post-service:latest
-          imagePullPolicy: IfNotPresent
+          image: sunaodisha/post-service:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 8003
           env:

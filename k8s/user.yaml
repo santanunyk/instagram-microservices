@@ -15,8 +15,8 @@ spec:
     spec:
       containers:
         - name: user
-          image: user-service:latest
-          imagePullPolicy: IfNotPresent
+          image: sunaodisha/user-service:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 8002
           env:

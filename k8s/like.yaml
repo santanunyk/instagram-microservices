@@ -15,8 +15,8 @@ spec:
     spec:
       containers:
         - name: like
-          image: like-service:latest
-          imagePullPolicy: IfNotPresent
+          image: sunaodisha/like-service:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 8005
           env:
