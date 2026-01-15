@@ -1,4 +1,4 @@
-name: Build & Deploy Microservices (Stage-Based)
+name: Build & Deploy Microservices
 
 on:
   push:
@@ -6,150 +6,116 @@ on:
       - main
 
 jobs:
-
-################################################################################
-#                               STAGE 1: CHECKOUT
-################################################################################
+  # ---------------------------------------------------------
+  # 1) CHECKOUT CODE
+  # ---------------------------------------------------------
   checkout:
     runs-on: self-hosted
     outputs:
-      tag: ${{ steps.vars.outputs.TAG }}
-
+      changed_services: ${{ steps.detect.outputs.changed }}
     steps:
-      - name: Checkout Code
+      - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Set Image Tag
-        id: vars
-        run: echo "TAG=sha-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
-
-################################################################################
-#                       STAGE 2: BUILD DOCKER IMAGES
-################################################################################
-  build:
-    needs: checkout
-    runs-on: self-hosted
-    outputs:
-      tag: ${{ needs.checkout.outputs.tag }}
-
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v3
-
-      - name: Build Microservice Images
+      # Detect which folders changed
+      - name: Detect changed services
+        id: detect
         run: |
-          TAG="${{ needs.checkout.outputs.tag }}"
+          echo "🔍 Detecting modified services..."
 
           SERVICES=(
-            "auth-service"
-            "user-service"
-            "post-service"
-            "comment-service"
-            "like-service"
-            "feed-service"
-            "notification-service"
-            "gateway-service"
+            "services/auth-service"
+            "services/user-service"
+            "services/post-service"
+            "services/comment-service"
+            "services/like-service"
+            "services/feed-service"
+            "services/notification-service"
+            "services/gateway-service"
+            "frontend"
           )
 
-          for svc in "${SERVICES[@]}"; do
-            echo "🔨 Building $svc image..."
-            docker build -t sunaodisha/$svc:$TAG ./services/$svc
-            docker build -t sunaodisha/$svc:latest ./services/$svc
+          CHANGED=""
+
+          for folder in "${SERVICES[@]}"; do
+            if git diff --name-only HEAD~1 HEAD | grep "^$folder/" >/dev/null; then
+              svc_name=$(basename $folder)
+              CHANGED="$CHANGED $svc_name"
+              echo "✅ Changed: $svc_name"
+            fi
           done
 
-          echo "🔨 Building frontend image..."
-          docker build -t sunaodisha/frontend:$TAG ./frontend
-          docker build -t sunaodisha/frontend:latest ./frontend
+          echo "changed=$CHANGED" >> $GITHUB_OUTPUT
 
-################################################################################
-#                       STAGE 3: PUSH IMAGES TO DOCKER HUB
-################################################################################
-  push:
-    needs: build
+
+  # ---------------------------------------------------------
+  # 2) BUILD & PUSH
+  # ---------------------------------------------------------
+  build:
+    needs: checkout
+    if: ${{ needs.checkout.outputs.changed_services != '' }}
     runs-on: self-hosted
-    outputs:
-      tag: ${{ needs.build.outputs.tag }}
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set Docker Tags
+        id: vars
+        run: |
+          echo "SHA_TAG=sha-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
 
-      - name: Push Microservice Images
+      - name: Build & Push Modified Services
         run: |
-          TAG="${{ needs.build.outputs.tag }}"
+          CHANGED="${{ needs.checkout.outputs.changed_services }}"
+          echo "Changed services: $CHANGED"
 
-          SERVICES=(
-            "auth-service"
-            "user-service"
-            "post-service"
-            "comment-service"
-            "like-service"
-            "feed-service"
-            "notification-service"
-            "gateway-service"
-          )
+          for svc in $CHANGED; do
+            echo "🚀 Building $svc ..."
 
-          for svc in "${SERVICES[@]}"; do
-            echo "📤 Pushing $svc..."
-            docker push sunaodisha/$svc:$TAG
+            if [ "$svc" = "frontend" ]; then
+              PATH_TO="./frontend"
+            else
+              PATH_TO="./services/$svc"
+            fi
+
+            docker build -t sunaodisha/$svc:${{ steps.vars.outputs.SHA_TAG }} $PATH_TO
+            docker tag sunaodisha/$svc:${{ steps.vars.outputs.SHA_TAG }} sunaodisha/$svc:latest
+
+            docker push sunaodisha/$svc:${{ steps.vars.outputs.SHA_TAG }}
             docker push sunaodisha/$svc:latest
+
+            echo "📦 Built & pushed $svc"
           done
 
-          echo "📤 Pushing frontend..."
-          docker push sunaodisha/frontend:$TAG
-          docker push sunaodisha/frontend:latest
 
-################################################################################
-#                       STAGE 4: APPLY KUBERNETES MANIFESTS
-################################################################################
+  # ---------------------------------------------------------
+  # 3) DEPLOY TO KUBERNETES
+  # ---------------------------------------------------------
   deploy:
-    needs: push
-    runs-on: self-hosted
-    outputs:
-      tag: ${{ needs.push.outputs.tag }}
-
-    steps:
-      - name: Apply Kubernetes Manifests
-        run: kubectl apply -f k8s/ -n insta
-
-################################################################################
-#                       STAGE 5: ROLLOUT RESTART DEPLOYMENTS
-################################################################################
-  restart:
-    needs: deploy
+    needs: build
     runs-on: self-hosted
 
     steps:
-      - name: Restart Microservice Deployments
+      - name: Apply Kubernetes YAMLs
+        run: kubectl apply -f k8s/
+
+      - name: Restart deployments for updated services
         run: |
-          DEPLOYMENTS=(
-            "auth"
-            "user"
-            "post"
-            "comment"
-            "like"
-            "feed"
-            "notification"
-            "gateway"
-            "frontend"
-          )
+          CHANGED="${{ needs.checkout.outputs.changed_services }}"
+          echo "Deploying updated services: $CHANGED"
 
-          for dep in "${DEPLOYMENTS[@]}"; do
-            echo "♻ Restarting $dep..."
-            kubectl rollout restart deployment/$dep -n insta
+          for svc in $CHANGED; do
+            echo "♻ Restarting deployment for $svc ..."
+            kubectl rollout restart deployment/$svc -n insta
           done
 
-################################################################################
-#                       STAGE 6: VERIFY FINAL DEPLOYMENT
-################################################################################
-  verify:
-    needs: restart
-    runs-on: self-hosted
-
-    steps:
-      - name: Verify Pods
+      - name: Verify Rollout
         run: kubectl get pods -n insta -o wide
 
