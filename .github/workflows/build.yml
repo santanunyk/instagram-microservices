@@ -23,81 +23,62 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
 
-      ###########################################################
       # AUTH SERVICE
-      ###########################################################
       - name: Build auth-service
         run: |
           docker build -t sunaodisha/auth-service:${{ steps.vars.outputs.TAG }} ./services/auth-service
           docker push sunaodisha/auth-service:${{ steps.vars.outputs.TAG }}
 
-      ###########################################################
       # USER SERVICE
-      ###########################################################
       - name: Build user-service
         run: |
           docker build -t sunaodisha/user-service:${{ steps.vars.outputs.TAG }} ./services/user-service
           docker push sunaodisha/user-service:${{ steps.vars.outputs.TAG }}
 
-      ###########################################################
       # POST SERVICE
-      ###########################################################
       - name: Build post-service
         run: |
           docker build -t sunaodisha/post-service:${{ steps.vars.outputs.TAG }} ./services/post-service
           docker push sunaodisha/post-service:${{ steps.vars.outputs.TAG }}
 
-      ###########################################################
       # COMMENT SERVICE
-      ###########################################################
       - name: Build comment-service
         run: |
           docker build -t sunaodisha/comment-service:${{ steps.vars.outputs.TAG }} ./services/comment-service
           docker push sunaodisha/comment-service:${{ steps.vars.outputs.TAG }}
 
-      ###########################################################
       # LIKE SERVICE
-      ###########################################################
       - name: Build like-service
         run: |
           docker build -t sunaodisha/like-service:${{ steps.vars.outputs.TAG }} ./services/like-service
           docker push sunaodisha/like-service:${{ steps.vars.outputs.TAG }}
 
-      ###########################################################
       # FEED SERVICE
-      ###########################################################
       - name: Build feed-service
         run: |
           docker build -t sunaodisha/feed-service:${{ steps.vars.outputs.TAG }} ./services/feed-service
           docker push sunaodisha/feed-service:${{ steps.vars.outputs.TAG }}
 
-      ###########################################################
       # NOTIFICATION SERVICE
-      ###########################################################
       - name: Build notification-service
         run: |
           docker build -t sunaodisha/notification-service:${{ steps.vars.outputs.TAG }} ./services/notification-service
           docker push sunaodisha/notification-service:${{ steps.vars.outputs.TAG }}
 
-      ###########################################################
       # GATEWAY SERVICE
-      ###########################################################
       - name: Build gateway-service
         run: |
           docker build -t sunaodisha/gateway-service:${{ steps.vars.outputs.TAG }} ./services/gateway-service
           docker push sunaodisha/gateway-service:${{ steps.vars.outputs.TAG }}
 
-      ###########################################################
       # FRONTEND SERVICE
-      ###########################################################
       - name: Build frontend
         run: |
           docker build -t sunaodisha/frontend:${{ steps.vars.outputs.TAG }} ./frontend
           docker push sunaodisha/frontend:${{ steps.vars.outputs.TAG }}
 
-      ###########################################################
       # PRINT RESULT
-      ###########################################################
       - name: Print Generated Tag
-        run: echo "Images built with tag: ${{ steps.vars.outputs.TAG }}"
+        run: |
+          echo "Images built with tag: ${{ steps.vars.outputs.TAG }}"
 
