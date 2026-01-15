@@ -6,22 +6,40 @@ on:
       - main
 
 jobs:
+
   # ---------------------------------------------------------
-  # 1) CHECKOUT CODE
+  # 1) CHECKOUT + DETECT CHANGES
   # ---------------------------------------------------------
   checkout:
     runs-on: self-hosted
+
     outputs:
-      changed_services: ${{ steps.detect.outputs.changed }}
+      changed: ${{ steps.detect.outputs.changed }}
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0   # IMPORTANT for diff
 
-      # Detect which folders changed
       - name: Detect changed services
         id: detect
         run: |
-          echo "🔍 Detecting modified services..."
+          echo "🔍 Detecting modified microservices..."
+
+          BEFORE_SHA="${{ github.event.before }}"
+          CURRENT_SHA="${{ github.sha }}"
+
+          # Handle first push (before = null)
+          if [ "$BEFORE_SHA" = "0000000000000000000000000000000000000000" ]; then
+            BEFORE_SHA=$(git rev-list --max-parents=0 HEAD)
+          fi
+
+          echo "Comparing commits:"
+          echo "FROM: $BEFORE_SHA"
+          echo "TO:   $CURRENT_SHA"
+
+          CHANGED_FILES=$(git diff --name-only $BEFORE_SHA $CURRENT_SHA)
 
           SERVICES=(
             "services/auth-service"
@@ -37,30 +55,31 @@ jobs:
 
           CHANGED=""
 
-          for folder in "${SERVICES[@]}"; do
-            if git diff --name-only HEAD~1 HEAD | grep "^$folder/" >/dev/null; then
-              svc_name=$(basename "$folder")
-              CHANGED="$CHANGED $svc_name"
-              echo "✅ Changed: $svc_name"
+          for FOLDER in "${SERVICES[@]}"; do
+            if echo "$CHANGED_FILES" | grep "^$FOLDER/" >/dev/null; then
+              NAME=$(basename $FOLDER)
+              echo "✅ Changed: $NAME"
+              CHANGED="$CHANGED $NAME"
             fi
           done
 
           echo "changed=$CHANGED" >> $GITHUB_OUTPUT
+          echo "CHANGED SERVICES: $CHANGED"
 
 
   # ---------------------------------------------------------
-  # 2) BUILD & PUSH ONLY UPDATED SERVICES
+  # 2) BUILD & PUSH DOCKER IMAGES
   # ---------------------------------------------------------
   build:
     needs: checkout
-    if: ${{ needs.checkout.outputs.changed_services != '' }}
+    if: ${{ needs.checkout.outputs.changed != '' }}   # Skip if nothing changed
     runs-on: self-hosted
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Set Docker Tags
+      - name: Set build variables
         id: vars
         run: |
           echo "SHA_TAG=sha-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
@@ -71,15 +90,14 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
 
-      - name: Build & Push Modified Services
+      - name: Build & Push Images
         run: |
-          CHANGED="${{ needs.checkout.outputs.changed_services }}"
-          echo "Changed services: $CHANGED"
+          CHANGED="${{ needs.checkout.outputs.changed }}"
+          echo "🚀 Building changed services: $CHANGED"
 
           for svc in $CHANGED; do
-            echo "🚀 Building $svc ..."
-
-            # Path logic
+            echo "--------------------------------------------"
+            echo "🔨 Building $svc"
             if [ "$svc" = "frontend" ]; then
               PATH_TO="./frontend"
             else
@@ -87,50 +105,39 @@ jobs:
             fi
 
             docker build -t sunaodisha/$svc:${{ steps.vars.outputs.SHA_TAG }} $PATH_TO
+
             docker tag sunaodisha/$svc:${{ steps.vars.outputs.SHA_TAG }} sunaodisha/$svc:latest
 
             docker push sunaodisha/$svc:${{ steps.vars.outputs.SHA_TAG }}
             docker push sunaodisha/$svc:latest
 
-            echo "📦 Built & pushed $svc"
+            echo "📦 DONE: $svc"
+            echo "--------------------------------------------"
           done
 
 
   # ---------------------------------------------------------
-  # 3) DEPLOY ONLY UPDATED SERVICES
+  # 3) DEPLOY TO KUBERNETES
   # ---------------------------------------------------------
   deploy:
     needs: build
     runs-on: self-hosted
+    if: ${{ needs.checkout.outputs.changed != '' }}
 
     steps:
-      - name: Apply Kubernetes Manifests
+      - name: Apply Kubernetes manifests
         run: kubectl apply -f k8s/
 
-      - name: Restart deployments for updated services
+      - name: Restart updated services
         run: |
-          CHANGED="${{ needs.checkout.outputs.changed_services }}"
-          echo "Deploying updated services: $CHANGED"
-
-          # SERVICE → DEPLOYMENT NAME MAPPING
-          declare -A MAP=(
-            ["auth-service"]="auth"
-            ["user-service"]="user"
-            ["post-service"]="post"
-            ["comment-service"]="comment"
-            ["like-service"]="like"
-            ["feed-service"]="feed"
-            ["notification-service"]="notification"
-            ["gateway-service"]="gateway"
-            ["frontend"]="frontend"
-          )
+          CHANGED="${{ needs.checkout.outputs.changed }}"
+          echo "♻ Restarting deployments: $CHANGED"
 
           for svc in $CHANGED; do
-            deployment="${MAP[$svc]}"
-            echo "♻ Restarting deployment $deployment ..."
-            kubectl rollout restart deployment/$deployment -n insta
+            echo "Restarting: $svc"
+            kubectl rollout restart deployment/$svc -n insta
           done
 
-      - name: Verify Rollout
+      - name: Verify rollout
         run: kubectl get pods -n insta -o wide
 
