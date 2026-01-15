@@ -51,7 +51,8 @@ jobs:
 
       # Print Result
       - name: Print Generated Tag
-        run: echo "Images built & pushed with tag: ${{ steps.vars.outputs.TAG }}"
+        run: |
+          echo "Images built & pushed with tag: ${{ steps.vars.outputs.TAG }}"
 
   deploy:
     needs: build
