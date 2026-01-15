@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: auth
-          image: sunaodisha/latest
+          image: sunaodisha/auth-service:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 8001
@@ -34,4 +34,4 @@ spec:
   ports:
     - port: 8001
       targetPort: 8001
-
+        
