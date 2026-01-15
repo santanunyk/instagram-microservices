@@ -39,7 +39,7 @@ jobs:
 
           for folder in "${SERVICES[@]}"; do
             if git diff --name-only HEAD~1 HEAD | grep "^$folder/" >/dev/null; then
-              svc_name=$(basename $folder)
+              svc_name=$(basename "$folder")
               CHANGED="$CHANGED $svc_name"
               echo "✅ Changed: $svc_name"
             fi
@@ -49,7 +49,7 @@ jobs:
 
 
   # ---------------------------------------------------------
-  # 2) BUILD & PUSH
+  # 2) BUILD & PUSH ONLY UPDATED SERVICES
   # ---------------------------------------------------------
   build:
     needs: checkout
@@ -79,6 +79,7 @@ jobs:
           for svc in $CHANGED; do
             echo "🚀 Building $svc ..."
 
+            # Path logic
             if [ "$svc" = "frontend" ]; then
               PATH_TO="./frontend"
             else
@@ -96,14 +97,14 @@ jobs:
 
 
   # ---------------------------------------------------------
-  # 3) DEPLOY TO KUBERNETES
+  # 3) DEPLOY ONLY UPDATED SERVICES
   # ---------------------------------------------------------
   deploy:
     needs: build
     runs-on: self-hosted
 
     steps:
-      - name: Apply Kubernetes YAMLs
+      - name: Apply Kubernetes Manifests
         run: kubectl apply -f k8s/
 
       - name: Restart deployments for updated services
@@ -111,9 +112,23 @@ jobs:
           CHANGED="${{ needs.checkout.outputs.changed_services }}"
           echo "Deploying updated services: $CHANGED"
 
+          # SERVICE → DEPLOYMENT NAME MAPPING
+          declare -A MAP=(
+            ["auth-service"]="auth"
+            ["user-service"]="user"
+            ["post-service"]="post"
+            ["comment-service"]="comment"
+            ["like-service"]="like"
+            ["feed-service"]="feed"
+            ["notification-service"]="notification"
+            ["gateway-service"]="gateway"
+            ["frontend"]="frontend"
+          )
+
           for svc in $CHANGED; do
-            echo "♻ Restarting deployment for $svc ..."
-            kubectl rollout restart deployment/$svc -n insta
+            deployment="${MAP[$svc]}"
+            echo "♻ Restarting deployment $deployment ..."
+            kubectl rollout restart deployment/$deployment -n insta
           done
 
       - name: Verify Rollout
