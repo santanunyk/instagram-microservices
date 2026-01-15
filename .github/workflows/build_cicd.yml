@@ -1,4 +1,4 @@
-name: Build & Deploy Microservices
+name: Build & Deploy Microservices (Stage-Based)
 
 on:
   push:
@@ -6,28 +6,40 @@ on:
       - main
 
 jobs:
-  build:
+
+################################################################################
+#                               STAGE 1: CHECKOUT
+################################################################################
+  checkout:
     runs-on: self-hosted
+    outputs:
+      tag: ${{ steps.vars.outputs.TAG }}
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
 
-      # Generate a unique image tag based on commit sha
       - name: Set Image Tag
         id: vars
         run: echo "TAG=sha-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
 
-      # Login to Docker Hub
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+################################################################################
+#                       STAGE 2: BUILD DOCKER IMAGES
+################################################################################
+  build:
+    needs: checkout
+    runs-on: self-hosted
+    outputs:
+      tag: ${{ needs.checkout.outputs.tag }}
 
-      # Build & Push All Services
-      - name: Build & Push Microservices
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Build Microservice Images
         run: |
+          TAG="${{ needs.checkout.outputs.tag }}"
+
           SERVICES=(
             "auth-service"
             "user-service"
@@ -40,29 +52,77 @@ jobs:
           )
 
           for svc in "${SERVICES[@]}"; do
-            echo "🚀 Building $svc ..."
-            docker build -t sunaodisha/$svc:${{ steps.vars.outputs.TAG }} ./services/$svc
-            docker push sunaodisha/$svc:${{ steps.vars.outputs.TAG }}
+            echo "🔨 Building $svc image..."
+            docker build -t sunaodisha/$svc:$TAG ./services/$svc
+            docker build -t sunaodisha/$svc:latest ./services/$svc
           done
 
-          echo "🚀 Building frontend ..."
-          docker build -t sunaodisha/frontend:${{ steps.vars.outputs.TAG }} ./frontend
-          docker push sunaodisha/frontend:${{ steps.vars.outputs.TAG }}
+          echo "🔨 Building frontend image..."
+          docker build -t sunaodisha/frontend:$TAG ./frontend
+          docker build -t sunaodisha/frontend:latest ./frontend
 
-      # Print Result
-      - name: Print Generated Tag
-        run: |
-          echo "Images built & pushed with tag: ${{ steps.vars.outputs.TAG }}"
-
-  deploy:
+################################################################################
+#                       STAGE 3: PUSH IMAGES TO DOCKER HUB
+################################################################################
+  push:
     needs: build
     runs-on: self-hosted
+    outputs:
+      tag: ${{ needs.build.outputs.tag }}
+
+    steps:
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+
+      - name: Push Microservice Images
+        run: |
+          TAG="${{ needs.build.outputs.tag }}"
+
+          SERVICES=(
+            "auth-service"
+            "user-service"
+            "post-service"
+            "comment-service"
+            "like-service"
+            "feed-service"
+            "notification-service"
+            "gateway-service"
+          )
+
+          for svc in "${SERVICES[@]}"; do
+            echo "📤 Pushing $svc..."
+            docker push sunaodisha/$svc:$TAG
+            docker push sunaodisha/$svc:latest
+          done
+
+          echo "📤 Pushing frontend..."
+          docker push sunaodisha/frontend:$TAG
+          docker push sunaodisha/frontend:latest
+
+################################################################################
+#                       STAGE 4: APPLY KUBERNETES MANIFESTS
+################################################################################
+  deploy:
+    needs: push
+    runs-on: self-hosted
+    outputs:
+      tag: ${{ needs.push.outputs.tag }}
 
     steps:
       - name: Apply Kubernetes Manifests
-        run: |
-          kubectl apply -f k8s/
+        run: kubectl apply -f k8s/ -n insta
 
+################################################################################
+#                       STAGE 5: ROLLOUT RESTART DEPLOYMENTS
+################################################################################
+  restart:
+    needs: deploy
+    runs-on: self-hosted
+
+    steps:
       - name: Restart Microservice Deployments
         run: |
           DEPLOYMENTS=(
@@ -78,10 +138,18 @@ jobs:
           )
 
           for dep in "${DEPLOYMENTS[@]}"; do
-            echo "♻ Rolling out $dep ..."
-            kubectl rollout restart deployment/$dep
+            echo "♻ Restarting $dep..."
+            kubectl rollout restart deployment/$dep -n insta
           done
 
-      - name: Verify Rollout
-        run: kubectl get pods -o wide
+################################################################################
+#                       STAGE 6: VERIFY FINAL DEPLOYMENT
+################################################################################
+  verify:
+    needs: restart
+    runs-on: self-hosted
+
+    steps:
+      - name: Verify Pods
+        run: kubectl get pods -n insta -o wide
 
